@@ -1,0 +1,19 @@
+# Paquets à désinstaller de l'ISO (un nom ou un motif avec * par ligne).
+# Les lignes commençant par "@remplace:" ne sont supprimées que si TOUS les
+# paquets de packages-add.txt ont pu être installés (sinon on garde l'original,
+# pour ne pas se retrouver sans suite bureautique).
+
+@remplace:libreoffice*
+
+# Messagerie / chat / torrent / numérisation : lourds au démarrage et rarement utiles
+thunderbird*
+pidgin*
+sylpheed*
+transmission-gtk
+transmission-common
+simple-scan
+quassel*
+mtpaint
+
+# Économiseurs d'écran graphiques : mangent du CPU pour rien
+xscreensaver*

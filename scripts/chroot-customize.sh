@@ -1,0 +1,105 @@
+#!/bin/bash
+# Exécuté À L'INTÉRIEUR du chroot i386 par build.sh.
+# Ne pas lancer sur votre machine !
+set -uo pipefail
+
+export DEBIAN_FRONTEND=noninteractive LC_ALL=C INITRD=No
+SRC=/tmp/x32
+log() { echo "[chroot] $*"; }
+
+# Empêche les paquets de démarrer des services pendant le build
+printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
+chmod +x /usr/sbin/policy-rc.d
+trap 'rm -f /usr/sbin/policy-rc.d' EXIT
+
+read_list() { grep -vE '^[[:space:]]*(#|$)' "$1" 2>/dev/null || true; }
+
+# ------------------------------------------------------------------ 1. ajouts
+INSTALL_OK=1
+mapfile -t ADD < <(read_list "$SRC/packages-add.txt")
+if [ "${#ADD[@]}" -gt 0 ]; then
+  if [ "${X32_SKIP_APT:-0}" = 1 ]; then
+    log "X32_SKIP_APT=1 : aucun paquet ajouté"; INSTALL_OK=0
+  elif apt-get update && apt-get install -y --no-install-recommends "${ADD[@]}"; then
+    log "paquets ajoutés : ${ADD[*]}"
+  else
+    log "ATTENTION : installation impossible, les paquets d'origine seront conservés"
+    INSTALL_OK=0
+  fi
+fi
+
+# Tout marquer « installé manuellement » : une suppression ne doit JAMAIS
+# entraîner de purge en cascade des dépendances (méta-paquets lubuntu-*).
+dpkg-query -W -f='${db:Status-Abbrev} ${Package}\n' | awk '$1=="ii"{print $2}' \
+  | xargs apt-mark manual >/dev/null 2>&1 || true
+
+# --------------------------------------------------------------- 2. suppressions
+installed_matching() {
+  dpkg-query -W -f='${db:Status-Abbrev} ${Package}\n' "$1" 2>/dev/null | awk '$1=="ii"{print $2}'
+}
+TO_REMOVE=()
+while IFS= read -r line; do
+  pat="$line"
+  if [[ "$line" == @remplace:* ]]; then
+    pat="${line#@remplace:}"
+    [ "$INSTALL_OK" = 1 ] || { log "conservé (pas de remplaçant installé) : $pat"; continue; }
+  fi
+  while IFS= read -r p; do [ -n "$p" ] && TO_REMOVE+=("$p"); done < <(installed_matching "$pat")
+done < <(read_list "$SRC/packages-remove.txt")
+
+if [ "${#TO_REMOVE[@]}" -gt 0 ]; then
+  log "suppression de ${#TO_REMOVE[@]} paquets"
+  apt-get purge -y "${TO_REMOVE[@]}" || log "ATTENTION : la suppression a échoué (le build continue)"
+fi
+apt-get clean
+
+# ------------------------------------------------------------ 3. services inutiles
+for s in ModemManager.service cups-browsed.service avahi-daemon.service \
+         apport.service whoopsie.service motd-news.timer irqbalance.service \
+         ondemand.service speech-dispatcher.service; do
+  systemctl disable "$s" >/dev/null 2>&1 || true
+done
+
+# Services maison (zram, gouverneur CPU, noatime au premier démarrage)
+for u in x32-zram.service x32-cpu.service x32-firstboot.service; do
+  systemctl enable "$u" >/dev/null 2>&1 \
+    || ln -sf "/etc/systemd/system/$u" "/etc/systemd/system/multi-user.target.wants/$u"
+done
+
+# Applets de session qui consomment du CPU/RAM (masqués, pas supprimés :
+# retirez la ligne Hidden=true pour les réactiver)
+for a in blueman update-notifier print-applet orca-autostart geoclue-demo-agent \
+         tracker-store tracker-miner-fs tracker-miner-apps tracker-extract \
+         zeitgeist-datahub deja-dup-monitor snap-userd-autostart; do
+  f="/etc/xdg/autostart/$a.desktop"
+  [ -f "$f" ] && ! grep -q '^Hidden=true' "$f" && echo 'Hidden=true' >> "$f"
+done
+
+# ---------------------------------------------------------------- 4. interface
+# Openbox : pas d'animation à la minimisation
+for f in /etc/xdg/openbox/lubuntu-rc.xml /etc/xdg/openbox/rc.xml; do
+  [ -f "$f" ] && sed -i 's#<animateIconify>yes#<animateIconify>no#' "$f"
+done
+
+# GTK3 : animations et clignotement du curseur désactivés (sans écraser le fichier existant)
+mkdir -p /etc/gtk-3.0
+touch /etc/gtk-3.0/settings.ini
+grep -q '^\[Settings\]' /etc/gtk-3.0/settings.ini || echo '[Settings]' >> /etc/gtk-3.0/settings.ini
+for kv in gtk-enable-animations=false gtk-cursor-blink=false; do
+  grep -q "^${kv%%=*}=" /etc/gtk-3.0/settings.ini \
+    || sed -i "/^\[Settings\]/a $kv" /etc/gtk-3.0/settings.ini
+done
+
+# Firefox : réglages pour petit processeur (selon l'emplacement présent dans cette version)
+if [ -f /usr/share/x32/firefox-x32.js ]; then
+  for d in /usr/lib/firefox/browser/defaults/preferences /usr/lib/firefox/defaults/pref; do
+    [ -d "$d" ] && cp /usr/share/x32/firefox-x32.js "$d/x32-tweaks.js"
+  done
+fi
+
+# ---------------------------------------------------------------- 5. identité
+if [ -f /etc/os-release ]; then
+  sed -i 's/^PRETTY_NAME=.*/PRETTY_NAME="X32 Système PC (base Lubuntu 18.04)"/' /etc/os-release 2>/dev/null || true
+fi
+
+log "personnalisation terminée"

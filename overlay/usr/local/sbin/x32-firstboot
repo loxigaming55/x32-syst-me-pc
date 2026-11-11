@@ -1,0 +1,16 @@
+#!/bin/sh
+# Premier démarrage du système INSTALLÉ (jamais en session live) :
+# ajoute « noatime » à la partition racine ext4 pour réduire les écritures disque.
+
+marker=/var/lib/x32-firstboot.done
+[ -e "$marker" ] && exit 0
+
+if grep -Eq '^[^#].*[[:space:]]/[[:space:]]+ext4[[:space:]]' /etc/fstab \
+   && ! grep -E '^[^#].*[[:space:]]/[[:space:]]+ext4[[:space:]]' /etc/fstab | grep -q noatime; then
+  cp /etc/fstab /etc/fstab.x32-backup
+  sed -i -E '/^[^#].*[[:space:]]\/[[:space:]]+ext4[[:space:]]/ s/(ext4[[:space:]]+)([^[:space:]]+)/\1\2,noatime/' /etc/fstab
+  mount -o remount,noatime / 2>/dev/null
+fi
+
+touch "$marker"
+exit 0

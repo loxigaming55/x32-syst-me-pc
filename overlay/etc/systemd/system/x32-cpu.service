@@ -1,0 +1,11 @@
+[Unit]
+Description=X32 : gouverneur de frequence CPU
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/x32-cpu-tune
+
+[Install]
+WantedBy=multi-user.target

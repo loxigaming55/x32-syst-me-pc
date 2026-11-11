@@ -1,0 +1,11 @@
+[Unit]
+Description=X32 : reglages du premier demarrage (systeme installe)
+ConditionKernelCommandLine=!boot=casper
+ConditionPathExists=!/var/lib/x32-firstboot.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/x32-firstboot
+
+[Install]
+WantedBy=multi-user.target

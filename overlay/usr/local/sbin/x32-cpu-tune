@@ -1,0 +1,14 @@
+#!/bin/sh
+# Applique le gouverneur de fréquence CPU choisi dans /etc/default/x32-tuning.
+
+CPU_GOVERNOR=ondemand
+[ -r /etc/default/x32-tuning ] && . /etc/default/x32-tuning
+
+for d in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
+  [ -d "$d" ] || continue
+  if grep -qw "$CPU_GOVERNOR" "$d/scaling_available_governors" 2>/dev/null; then
+    echo "$CPU_GOVERNOR" > "$d/scaling_governor" 2>/dev/null
+  fi
+done
+
+exit 0

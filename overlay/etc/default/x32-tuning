@@ -1,0 +1,12 @@
+# Réglages X32 Système PC (lus par x32-zram et x32-cpu-tune)
+
+# zram : swap compressé en RAM
+ZRAM_ENABLE=1
+# Taille du périphérique zram en % de la RAM
+ZRAM_PERCENT=40
+# lz4 = le plus léger pour le CPU (essayez lzo si lz4 est indisponible)
+ZRAM_ALGO=lz4
+
+# Gouverneur de fréquence CPU : ondemand (réactif), conservative (plus sobre),
+# powersave (toujours à la fréquence minimale), performance
+CPU_GOVERNOR=ondemand

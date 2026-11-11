@@ -1,0 +1,33 @@
+#!/bin/sh
+# Active / désactive un swap zram. Réglages dans /etc/default/x32-tuning.
+
+ZRAM_ENABLE=1
+ZRAM_PERCENT=40
+ZRAM_ALGO=lz4
+[ -r /etc/default/x32-tuning ] && . /etc/default/x32-tuning
+
+dev=/sys/block/zram0
+
+case "$1" in
+  start)
+    [ "$ZRAM_ENABLE" = "1" ] || exit 0
+    modprobe zram num_devices=1 2>/dev/null || exit 0
+    [ -d "$dev" ] || exit 0
+    if grep -qw "$ZRAM_ALGO" "$dev/comp_algorithm" 2>/dev/null; then
+      echo "$ZRAM_ALGO" > "$dev/comp_algorithm"
+    fi
+    mem_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+    echo $((mem_kb * 1024 / 100 * ZRAM_PERCENT)) > "$dev/disksize" || exit 0
+    mkswap /dev/zram0 >/dev/null 2>&1 || exit 0
+    swapon -p 100 /dev/zram0
+    ;;
+  stop)
+    swapoff /dev/zram0 2>/dev/null
+    [ -d "$dev" ] && echo 1 > "$dev/reset" 2>/dev/null
+    exit 0
+    ;;
+  *)
+    echo "usage : $0 start|stop" >&2
+    exit 1
+    ;;
+esac

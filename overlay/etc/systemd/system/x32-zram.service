@@ -1,0 +1,15 @@
+[Unit]
+Description=X32 : swap compresse en RAM (zram)
+DefaultDependencies=no
+After=systemd-modules-load.service
+Before=swap.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/x32-zram start
+ExecStop=/usr/local/sbin/x32-zram stop
+
+[Install]
+WantedBy=multi-user.target

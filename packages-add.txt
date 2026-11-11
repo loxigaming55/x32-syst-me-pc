@@ -1,0 +1,7 @@
+# Paquets à ajouter (nécessite l'accès au dépôt Ubuntu bionic pendant le build).
+# Un nom par ligne. Si l'installation échoue, le build continue et LibreOffice
+# est conservé (voir @remplace: dans packages-remove.txt).
+
+# Remplaçants légers de LibreOffice
+abiword
+gnumeric

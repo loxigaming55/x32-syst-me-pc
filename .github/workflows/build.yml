@@ -1,0 +1,47 @@
+name: Compiler l'ISO X32 Système PC
+
+on:
+  workflow_dispatch:        # bouton « Run workflow » dans l'onglet Actions
+  push:
+    tags: ["v*"]            # un tag v0.1.0 publie l'ISO dans « Releases »
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Libérer de la place disque
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Installer les outils
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xorriso squashfs-tools wget util-linux coreutils
+
+      - name: Compiler l'ISO
+        run: sudo ./build.sh
+
+      - name: Envoyer l'ISO (artefact, 7 jours)
+        uses: actions/upload-artifact@v4
+        with:
+          name: x32-systeme-pc-iso
+          path: |
+            out/*.iso
+            out/*.sha256
+          retention-days: 7
+          compression-level: 0
+
+      - name: Publier dans Releases (si tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/*.iso
+            out/*.sha256
