@@ -117,7 +117,7 @@ customize() {
   tar -C "$ROOT/overlay" --owner=0 --group=0 --numeric-owner -cf - . | tar -C "$CHROOT" -xpf -
 
   mkdir -p "$CHROOT/tmp/x32"
-  cp "$ROOT/scripts/chroot-customize.sh" "$ROOT/packages-add.txt" "$ROOT/packages-remove.txt" "$CHROOT/tmp/x32/"
+  cp "$ROOT/scripts/chroot-customize.sh" "$ROOT/scripts/chroot-design.sh" "$ROOT/packages-add.txt" "$ROOT/packages-remove.txt" "$CHROOT/tmp/x32/"
 
   mount_chroot
   setup_dns

@@ -32,6 +32,19 @@ l'**ASUS Eee PC 1001PX / 1001PXD** (Atom N450, 1 à 2 Go de RAM).
 > mais retirez ce paramètre si cela vous inquiète (`config.env` et
 > `overlay/etc/default/grub.d/99-x32.cfg`).
 
+## Design
+
+Un look moderne mais **sans effets coûteux** (aucune transparence, aucune ombre, aucune composition) :
+
+- thème sombre **Arc-Dark** (GTK2/GTK3 + bordures de fenêtres Openbox) ;
+- icônes **Papirus** ;
+- fond d'écran dégradé statique (JPEG de ~12 Ko, régénérable avec `python3 tools/gen-wallpaper.py`) ;
+- écran de connexion assorti, terminal LXTerminal aux couleurs du thème, police Ubuntu 10.
+
+Les paquets `arc-theme` et `papirus-icon-theme` sont *optionnels* dans `packages-add.txt` :
+s'ils ne peuvent pas être installés, le thème Lubuntu d'origine est conservé et le build continue.
+Pour changer de thème : `scripts/chroot-design.sh`.
+
 ## Compiler l'ISO
 
 ### Option 1 : sur GitHub (aucun outil à installer)
@@ -77,6 +90,8 @@ Si le BIOS de l'Eee PC refuse de démarrer l'ISO, essayez Rufus en mode « Image
 | `overlay/` | fichiers copiés tels quels dans le système (`/etc`, `/usr/local/sbin`…) |
 | `overlay/etc/default/x32-tuning` | zram et gouverneur CPU |
 | `scripts/chroot-customize.sh` | réglages appliqués dans le chroot |
+| `scripts/chroot-design.sh` | thème, icônes, écran de connexion |
+| `tools/gen-wallpaper.py` | génère le fond d'écran |
 
 ## Avertissement
 

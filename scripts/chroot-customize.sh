@@ -15,16 +15,33 @@ trap 'rm -f /usr/sbin/policy-rc.d' EXIT
 read_list() { grep -vE '^[[:space:]]*(#|$)' "$1" 2>/dev/null || true; }
 
 # ------------------------------------------------------------------ 1. ajouts
+# Lignes normales = requises (si l'une échoue, on garde LibreOffice).
+# Lignes "@optionnel:" = design, installées une par une sans bloquer le build.
 INSTALL_OK=1
-mapfile -t ADD < <(read_list "$SRC/packages-add.txt")
-if [ "${#ADD[@]}" -gt 0 ]; then
-  if [ "${X32_SKIP_APT:-0}" = 1 ]; then
-    log "X32_SKIP_APT=1 : aucun paquet ajouté"; INSTALL_OK=0
-  elif apt-get update && apt-get install -y --no-install-recommends "${ADD[@]}"; then
-    log "paquets ajoutés : ${ADD[*]}"
-  else
-    log "ATTENTION : installation impossible, les paquets d'origine seront conservés"
+REQ=(); OPT=()
+while IFS= read -r line; do
+  if [[ "$line" == @optionnel:* ]]; then OPT+=("${line#@optionnel:}"); else REQ+=("$line"); fi
+done < <(read_list "$SRC/packages-add.txt")
+
+if [ "${X32_SKIP_APT:-0}" = 1 ]; then
+  log "X32_SKIP_APT=1 : aucun paquet ajouté"; INSTALL_OK=0
+elif [ "${#REQ[@]}" -gt 0 ] || [ "${#OPT[@]}" -gt 0 ]; then
+  if ! apt-get update; then
+    log "ATTENTION : apt-get update impossible, les paquets d'origine seront conservés"
     INSTALL_OK=0
+  else
+    if [ "${#REQ[@]}" -gt 0 ]; then
+      if apt-get install -y --no-install-recommends "${REQ[@]}"; then
+        log "paquets ajoutés : ${REQ[*]}"
+      else
+        log "ATTENTION : paquets requis non installés, les originaux sont conservés"
+        INSTALL_OK=0
+      fi
+    fi
+    for p in "${OPT[@]}"; do
+      if apt-get install -y --no-install-recommends "$p"; then log "optionnel ajouté : $p"
+      else log "optionnel ignoré : $p"; fi
+    done
   fi
 fi
 
@@ -89,6 +106,9 @@ for kv in gtk-enable-animations=false gtk-cursor-blink=false; do
   grep -q "^${kv%%=*}=" /etc/gtk-3.0/settings.ini \
     || sed -i "/^\[Settings\]/a $kv" /etc/gtk-3.0/settings.ini
 done
+
+# Design (thème, icônes, écran de connexion) : voir chroot-design.sh
+[ -f "$SRC/chroot-design.sh" ] && . "$SRC/chroot-design.sh"
 
 # Firefox : réglages pour petit processeur (selon l'emplacement présent dans cette version)
 if [ -f /usr/share/x32/firefox-x32.js ]; then

@@ -1,7 +1,12 @@
 # Paquets à ajouter (nécessite l'accès au dépôt Ubuntu bionic pendant le build).
-# Un nom par ligne. Si l'installation échoue, le build continue et LibreOffice
-# est conservé (voir @remplace: dans packages-remove.txt).
+# Un nom par ligne.
+#  - ligne normale     : REQUIS. Si l'installation échoue, LibreOffice est conservé.
+#  - "@optionnel:nom"  : design, installé séparément ; un échec ne bloque rien.
 
 # Remplaçants légers de LibreOffice
 abiword
 gnumeric
+
+# Design : thème sombre moderne et icônes
+@optionnel:arc-theme
+@optionnel:papirus-icon-theme
