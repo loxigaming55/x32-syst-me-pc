@@ -1,9 +1,9 @@
 # Paquets à désinstaller de l'ISO (un nom ou un motif avec * par ligne).
-# Les lignes commençant par "@remplace:" ne sont supprimées que si TOUS les
-# paquets de packages-add.txt ont pu être installés (sinon on garde l'original,
-# pour ne pas se retrouver sans suite bureautique).
+# (Une ligne "@remplace:motif" n'est supprimée que si tous les paquets requis de
+#  packages-add.txt ont pu être installés ; plus utilisé pour l'instant.)
 
-@remplace:libreoffice*
+# Suite bureautique d'origine : remplacée par X32 Office (texte + tableur), voir README
+libreoffice*
 
 # Messagerie / chat / torrent / numérisation : lourds au démarrage et rarement utiles
 thunderbird*

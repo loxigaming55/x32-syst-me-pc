@@ -1,0 +1,12 @@
+[Unit]
+Description=X32 : prechargement de Firefox en cache
+After=multi-user.target
+
+[Service]
+Type=oneshot
+Nice=19
+IOSchedulingClass=idle
+ExecStart=/usr/local/sbin/x32-prefetch
+
+[Install]
+WantedBy=multi-user.target

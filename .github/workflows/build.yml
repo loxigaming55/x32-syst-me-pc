@@ -1,15 +1,49 @@
-name: Compiler l'ISO X32 Système PC
+name: Compiler X32 Système PC
 
 on:
   workflow_dispatch:        # bouton « Run workflow » dans l'onglet Actions
   push:
-    tags: ["v*"]            # un tag v0.1.0 publie l'ISO dans « Releases »
+    tags: ["v*"]            # un tag v0.2.0 publie l'ISO + la mise à jour dans « Releases »
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  # 1) Paquet de mise à jour (rapide) : ce que x32-update installe sur un système existant
+  update:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fabriquer et signer le paquet de mise à jour
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -n "$UPDATE_SIGNING_KEY" ]; then
+            printf '%s\n' "$UPDATE_SIGNING_KEY" > "$RUNNER_TEMP/key.pem"
+            chmod 600 "$RUNNER_TEMP/key.pem"
+            X32_SIGNING_KEY="$RUNNER_TEMP/key.pem" tools/make-update.sh
+            rm -f "$RUNNER_TEMP/key.pem"
+          else
+            echo "::warning::Secret UPDATE_SIGNING_KEY absent : paquet NON signé (x32-update le refusera). Voir README."
+            tools/make-update.sh
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: x32-update
+          path: out/x32-update-*
+          retention-days: 14
+
+      - name: Publier dans Releases (si tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/x32-update-*
+
+  # 2) ISO installable
+  iso:
+    needs: update
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
@@ -23,7 +57,7 @@ jobs:
       - name: Installer les outils
         run: |
           sudo apt-get update
-          sudo apt-get install -y xorriso squashfs-tools wget util-linux coreutils
+          sudo apt-get install -y xorriso squashfs-tools wget util-linux coreutils python3 file
 
       - name: Compiler l'ISO
         run: sudo ./build.sh

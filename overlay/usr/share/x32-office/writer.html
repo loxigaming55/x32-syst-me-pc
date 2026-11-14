@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src file: data: blob: 'unsafe-inline'; connect-src 'none'; form-action 'none'">
+<title>Texte - X32 Office</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  #desk { flex: 1; overflow: auto; background: var(--desk); padding: 16px 0; }
+  #page { width: 794px; max-width: none; min-height: 1000px; margin: 0 auto; background: var(--paper); color: var(--ink);
+          padding: 64px 72px; outline: none; font: 12pt/1.5 "Ubuntu", "DejaVu Sans", Arial, sans-serif; box-shadow: 0 1px 6px rgba(0,0,0,.5); }
+  #page h1 { font-size: 22pt; margin: .4em 0 .3em; } #page h2 { font-size: 17pt; margin: .5em 0 .3em; } #page h3 { font-size: 14pt; margin: .5em 0 .3em; }
+  #page p { margin: 0 0 .6em; } #page blockquote { margin: .6em 0 .6em 1em; padding-left: 1em; border-left: 3px solid #bbb; color: #444; }
+  #page table { border-collapse: collapse; margin: .5em 0; } #page td, #page th { border: 1px solid #888; padding: 4px 8px; min-width: 50px; }
+  #page img { max-width: 100%; height: auto; } #page a { color: #1a5fd0; }
+  .bar select { max-width: 130px; }
+  #find { display: none; } #find.show { display: flex; }
+  @media print {
+    #desk { padding: 0; background: #fff; overflow: visible; } #page { width: auto; box-shadow: none; padding: 0; min-height: 0; }
+    @page { margin: 20mm; }
+  }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button class="btn" onclick="W.newDoc()" title="Nouveau (Ctrl+N)">Nouveau</button>
+  <button class="btn" onclick="W.openDoc()" title="Ouvrir (Ctrl+O)">Ouvrir</button>
+  <button class="btn primary" onclick="W.save()" title="Enregistrer (Ctrl+S)">Enregistrer</button>
+  <button class="btn" onclick="W.exportTxt()" title="Exporter en texte brut">.txt</button>
+  <button class="btn" onclick="X32.print()" title="Imprimer / PDF (Ctrl+P)">Imprimer</button>
+  <span class="sep"></span>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('undo')" title="Annuler (Ctrl+Z)">↶</button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('redo')" title="Rétablir (Ctrl+Y)">↷</button>
+  <span class="sep"></span>
+  <button class="btn" onclick="X32.home()" title="Accueil">⌂</button>
+</div>
+<div class="bar second">
+  <select id="block" onchange="W.block(this.value)" title="Style">
+    <option value="p">Paragraphe</option><option value="h1">Titre 1</option><option value="h2">Titre 2</option>
+    <option value="h3">Titre 3</option><option value="blockquote">Citation</option>
+  </select>
+  <select id="font" onchange="W.font(this.value)" title="Police">
+    <option value="Ubuntu, 'DejaVu Sans', sans-serif">Sans</option><option value="'DejaVu Serif', Georgia, serif">Serif</option>
+    <option value="'DejaVu Sans Mono', monospace">Mono</option>
+  </select>
+  <select id="size" onchange="W.size(this.value)" title="Taille">
+    <option>9</option><option>10</option><option>11</option><option selected>12</option><option>14</option>
+    <option>16</option><option>18</option><option>24</option><option>32</option>
+  </select>
+  <span class="sep"></span>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('bold')" title="Gras (Ctrl+B)"><b>G</b></button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('italic')" title="Italique (Ctrl+I)"><i>I</i></button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('underline')" title="Souligné (Ctrl+U)"><u>S</u></button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('strikeThrough')" title="Barré"><s>B</s></button>
+  <input type="color" value="#000000" title="Couleur du texte" onchange="W.color('foreColor', this.value)">
+  <input type="color" value="#ffff00" title="Surlignage" onchange="W.color('hiliteColor', this.value)">
+  <span class="sep"></span>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('justifyLeft')" title="Aligner à gauche">⇤</button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('justifyCenter')" title="Centrer">↔</button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('justifyRight')" title="Aligner à droite">⇥</button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('justifyFull')" title="Justifier">☰</button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('insertUnorderedList')" title="Liste à puces">•≡</button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('insertOrderedList')" title="Liste numérotée">1≡</button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('outdent')" title="Diminuer le retrait">«</button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('indent')" title="Augmenter le retrait">»</button>
+  <span class="sep"></span>
+  <button class="btn" onmousedown="return false" onclick="W.link()" title="Lien">🔗</button>
+  <button class="btn" onmousedown="return false" onclick="W.image()" title="Image">🖼</button>
+  <button class="btn" onmousedown="return false" onclick="W.table()" title="Tableau">▦</button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('insertHorizontalRule')" title="Ligne horizontale">―</button>
+  <button class="btn" onmousedown="return false" onclick="W.cmd('removeFormat')" title="Effacer la mise en forme">Tx</button>
+  <button class="btn" onclick="W.toggleFind()" title="Rechercher (Ctrl+F)">🔍</button>
+</div>
+<div class="bar second" id="find">
+  <input type="text" id="q" placeholder="Rechercher…" onkeydown="if(event.key==='Enter'){W.find(!event.shiftKey)}if(event.key==='Escape'){W.toggleFind()}">
+  <button class="btn" onclick="W.find(false)">↑</button><button class="btn" onclick="W.find(true)">↓</button>
+  <button class="btn" onclick="W.toggleFind()">✕</button>
+</div>
+<div id="desk"><div id="page" contenteditable="true" spellcheck="true" lang="fr"><p><br></p></div></div>
+<div class="status"><span id="fname">Sans titre</span><span class="grow"></span><span id="count">0 mot</span>
+  <span><button class="btn" style="height:20px" onclick="W.zoom(-10)">−</button> <span id="zoom">100%</span> <button class="btn" style="height:20px" onclick="W.zoom(10)">+</button></span></div>
+<input type="file" id="imgin" accept="image/*" style="display:none">
+
+<script src="common.js"></script>
+<script>
+(function () {
+  'use strict';
+  var page = document.getElementById('page'), fname = 'Sans titre', zoom = 100, savedRange = null, DRAFT = 'x32.writer.draft';
+
+  // ---- sélection mémorisée (les listes déroulantes la font perdre) ----
+  document.addEventListener('selectionchange', function () {
+    var s = window.getSelection();
+    if (s.rangeCount && page.contains(s.anchorNode)) { savedRange = s.getRangeAt(0).cloneRange(); updateBlock(); }
+  });
+  function restore() {
+    var s = window.getSelection();
+    var inside = s.rangeCount && page.contains(s.anchorNode);   // la sélection est déjà dans la page : on la garde
+    page.focus();
+    if (!inside && savedRange) { s.removeAllRanges(); s.addRange(savedRange); }
+  }
+  function updateBlock() {
+    try {
+      var v = (document.queryCommandValue('formatBlock') || 'p').toLowerCase().replace(/[<>]/g, '');
+      var sel = document.getElementById('block');
+      sel.value = /^(h1|h2|h3|blockquote)$/.test(v) ? v : 'p';
+    } catch (e) {}
+  }
+  function mark() { X32.dirty = true; stats(); }
+  function stats() {
+    var t = (page.innerText || '').trim(), n = t ? t.split(/\s+/).length : 0;
+    document.getElementById('count').textContent = n + (n > 1 ? ' mots' : ' mot') + ' · ' + t.length + ' car.';
+  }
+  function title() { document.title = (X32.dirty ? '● ' : '') + fname + ' - Texte'; document.getElementById('fname').textContent = fname + (X32.dirty ? ' (modifié)' : ''); }
+
+  page.addEventListener('input', function () { mark(); title(); });
+
+  // ---- commandes ----
+  var W = window.W = {
+    cmd: function (c, v) { restore(); document.execCommand(c, false, v || null); mark(); title(); },
+    block: function (v) { restore(); document.execCommand('formatBlock', false, '<' + v + '>'); mark(); title(); },
+    font: function (v) { restore(); document.execCommand('fontName', false, v); mark(); title(); },
+    color: function (c, v) { restore(); document.execCommand('styleWithCSS', false, true); document.execCommand(c, false, v); mark(); title(); },
+    size: function (pt) {
+      restore(); document.execCommand('fontSize', false, 7);
+      var fs = page.querySelectorAll('font[size="7"]');
+      for (var i = 0; i < fs.length; i++) {
+        var sp = document.createElement('span'); sp.style.fontSize = pt + 'pt';
+        while (fs[i].firstChild) sp.appendChild(fs[i].firstChild);
+        fs[i].parentNode.replaceChild(sp, fs[i]);
+      }
+      mark(); title();
+    },
+    link: function () {
+      var r = savedRange;
+      X32.ask('Adresse du lien (https://…)', 'https://', function (u) {
+        savedRange = r; restore();
+        if (/^(https?:\/\/|mailto:)/i.test(u)) { document.execCommand('createLink', false, u); mark(); title(); }
+        else if (u) X32.toast('Adresse refusée (http, https ou mailto uniquement)');
+      });
+    },
+    table: function () {
+      var r = savedRange;
+      X32.ask('Tableau : colonnes x lignes', '3x3', function (v) {
+        var m = /^\s*(\d{1,2})\s*[x×*]\s*(\d{1,3})\s*$/i.exec(v); if (!m) return X32.toast('Format attendu : 3x4');
+        var h = '<table>'; for (var i = 0; i < +m[2]; i++) { h += '<tr>'; for (var j = 0; j < +m[1]; j++) h += '<td><br></td>'; h += '</tr>'; } h += '</table><p><br></p>';
+        savedRange = r; restore(); document.execCommand('insertHTML', false, h); mark(); title();
+      });
+    },
+    image: function () { document.getElementById('imgin').value = ''; document.getElementById('imgin').click(); },
+    undo: function () { W.cmd('undo'); },
+
+    zoom: function (d) {
+      zoom = Math.max(50, Math.min(200, zoom + d));
+      page.style.zoom = zoom / 100; document.getElementById('zoom').textContent = zoom + '%';
+    },
+    toggleFind: function () {
+      var f = document.getElementById('find'); f.classList.toggle('show');
+      if (f.classList.contains('show')) document.getElementById('q').focus(); else restore();
+    },
+    find: function (fwd) { var q = document.getElementById('q').value; if (q && !window.find(q, false, !fwd, true)) X32.toast('Plus de résultat'); },
+
+    // ---- fichiers ----
+    newDoc: function () {
+      function go() { page.innerHTML = '<p><br></p>'; fname = 'Sans titre'; X32.dirty = false; title(); stats(); page.focus(); }
+      if (X32.dirty) X32.ask('Abandonner les modifications non enregistrées ?', '', go, { confirm: true, yes: 'Abandonner' }); else go();
+    },
+    openDoc: function () { X32.open('.html,.htm,.txt'); },
+    save: function () {
+      var base = fname.replace(/\.(html?|txt)$/i, '') + '.html';
+      var doc = '<!doctype html>\n<html lang="fr"><head><meta charset="utf-8"><title>' + esc(fname) + '</title>\n' +
+        '<style>body{font:12pt/1.5 Arial,sans-serif;max-width:21cm;margin:2cm auto;padding:0 1cm}table{border-collapse:collapse}td,th{border:1px solid #888;padding:4px 8px}img{max-width:100%}blockquote{border-left:3px solid #bbb;padding-left:1em;color:#444}</style>\n' +
+        '</head><body>\n' + page.innerHTML + '\n</body></html>\n';
+      X32.save(base, 'text/html', doc, function (n) { fname = n; X32.dirty = false; try { localStorage.removeItem(DRAFT); } catch (e) {} title(); X32.toast('Enregistré'); });
+    },
+    exportTxt: function () {
+      X32.save(fname.replace(/\.(html?|txt)$/i, '') + '.txt', 'text/plain', page.innerText || '', function () { X32.toast('Exporté en texte'); });
+    }
+  };
+  function esc(s) { return s.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  // ---- ouverture avec nettoyage (aucun script / attribut dangereux) ----
+  function clean(html) {
+    var d = new DOMParser().parseFromString(html, 'text/html');
+    var bad = d.querySelectorAll('script,style,iframe,frame,object,embed,link,meta,base,form,input,button,svg,math,audio,video');
+    for (var i = 0; i < bad.length; i++) bad[i].remove();
+    var all = d.body.querySelectorAll('*');
+    for (var j = 0; j < all.length; j++) {
+      var at = all[j].attributes;
+      for (var k = at.length - 1; k >= 0; k--) {
+        var n = at[k].name.toLowerCase(), v = at[k].value;
+        if (n.indexOf('on') === 0) all[j].removeAttribute(at[k].name);
+        else if ((n === 'href' || n === 'src') && !/^(https?:|mailto:|#|data:image\/(png|jpe?g|gif|webp);)/i.test(v.trim())) all[j].removeAttribute(at[k].name);
+        else if (n === 'style' && /(expression|url\s*\(|javascript:)/i.test(v)) all[j].removeAttribute(at[k].name);
+      }
+    }
+    return d.body.innerHTML;
+  }
+  X32.openHandler = function (name, text) {
+    var isHtml = /\.html?$/i.test(name);
+    page.innerHTML = isHtml ? clean(text) : text.split(/\r?\n/).map(function (l) { return '<p>' + (esc(l) || '<br>') + '</p>'; }).join('');
+    if (!page.innerHTML.trim()) page.innerHTML = '<p><br></p>';
+    fname = name; X32.dirty = false; title(); stats(); X32.toast('Ouvert : ' + name);
+  };
+
+  // ---- images (réduites à 900 px max pour rester légères) ----
+  document.getElementById('imgin').addEventListener('change', function () {
+    var f = this.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var w = img.width, h = img.height, max = 900;
+        if (w > max) { h = Math.round(h * max / w); w = max; }
+        var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        var url = /png|gif/.test(f.type) ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg', 0.85);
+        restore(); document.execCommand('insertImage', false, url); mark(); title();
+      };
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(f);
+  });
+
+  // ---- raccourcis ----
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    var k = e.key.toLowerCase();
+    if (k === 's') { e.preventDefault(); W.save(); }
+    else if (k === 'o') { e.preventDefault(); W.openDoc(); }
+    else if (k === 'n') { e.preventDefault(); W.newDoc(); }
+    else if (k === 'p') { e.preventDefault(); X32.print(); }
+    else if (k === 'f') { e.preventDefault(); W.toggleFind(); }
+    else if (k === 'y') { e.preventDefault(); W.cmd('redo'); }
+  });
+
+  // ---- brouillon automatique (récupération après plantage) ----
+  setInterval(function () {
+    if (!X32.dirty) return;
+    try { localStorage.setItem(DRAFT, JSON.stringify({ name: fname, html: page.innerHTML })); } catch (e) {}
+  }, 15000);
+
+  // Ajuste le zoom à la largeur de la fenêtre (petits écrans)
+  var fit = Math.floor(Math.min(100, (window.innerWidth - 24) / 794 * 100) / 10) * 10;
+  if (fit < 100) W.zoom(fit - 100);
+
+  try {
+    var d = JSON.parse(localStorage.getItem(DRAFT) || 'null');
+    if (d && d.html && d.html.replace(/<[^>]*>/g, '').trim()) {
+      X32.ask('Un brouillon non enregistré a été retrouvé (« ' + d.name + ' »). Le restaurer ?', '', function () {
+        page.innerHTML = clean(d.html); fname = d.name; X32.dirty = true; title(); stats();
+      }, { confirm: true, yes: 'Restaurer', no: 'Ignorer' });
+      localStorage.removeItem(DRAFT);
+    }
+  } catch (e) {}
+  title(); stats(); page.focus();
+})();
+</script>
+</body>
+</html>

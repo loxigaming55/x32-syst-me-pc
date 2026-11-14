@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Mise à jour X32 (clé USB)
+GenericName=Mettre à jour depuis une clé USB
+Comment=Installe le fichier x32-update-*.tar.gz présent sur une clé USB
+Exec=lxterminal --title="Mise à jour X32 (USB)" -e "pkexec /usr/local/sbin/x32-update --usb --pause"
+Icon=drive-removable-media-usb
+Terminal=false
+Categories=System;Settings;

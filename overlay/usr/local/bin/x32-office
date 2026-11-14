@@ -1,0 +1,9 @@
+#!/bin/sh
+# Lance X32 Office (fenêtre d'application). Usage : x32-office [page.html|fichier]
+# Repli : si WebKitGTK n'est pas installé, ouvre la page dans Firefox.
+APP=/usr/local/bin/x32-office-app
+page="${X32_PAGE:-index.html}"
+if python3 -c "import gi; gi.require_version('WebKit2','4.0'); from gi.repository import WebKit2" >/dev/null 2>&1; then
+  exec python3 "$APP" "$page" "$@"
+fi
+exec firefox --new-window "file:///usr/share/x32-office/$page"

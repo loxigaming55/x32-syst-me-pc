@@ -116,6 +116,20 @@ customize() {
   log "Application des réglages (overlay) et des scripts"
   tar -C "$ROOT/overlay" --owner=0 --group=0 --numeric-owner -cf - . | tar -C "$CHROOT" -xpf -
 
+  # Numéro de version du système (lu plus tard par x32-update)
+  mkdir -p "$CHROOT/etc"
+  cp "$ROOT/VERSION" "$CHROOT/etc/x32-release"
+
+  # Firefox ESR officiel 32 bits (dernier build i686 de Mozilla), installé depuis l'hôte.
+  # Si le téléchargement échoue, on garde le Firefox d'Ubuntu et le build continue.
+  if [ "${X32_SKIP_FIREFOX:-0}" = 1 ]; then
+    warn "X32_SKIP_FIREFOX=1 : Firefox d'Ubuntu conservé"
+  else
+    log "Installation de Firefox ESR (build i686 officiel)"
+    "$ROOT/overlay/usr/local/sbin/x32-firefox-update" --root "$CHROOT" --force \
+      || warn "Firefox ESR non installé : le Firefox d'Ubuntu est conservé"
+  fi
+
   mkdir -p "$CHROOT/tmp/x32"
   cp "$ROOT/scripts/chroot-customize.sh" "$ROOT/scripts/chroot-design.sh" "$ROOT/packages-add.txt" "$ROOT/packages-remove.txt" "$CHROOT/tmp/x32/"
 

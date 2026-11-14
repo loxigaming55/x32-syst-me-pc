@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src file: data: blob: 'unsafe-inline'; connect-src 'none'; form-action 'none'">
+<title>Tableur - X32 Office</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  #fx { display: flex; gap: 4px; padding: 3px 6px; background: var(--bar2); border-bottom: 1px solid var(--line); flex: none; }
+  #name { width: 70px; text-align: center; } #formula { flex: 1; }
+  #wrap { flex: 1; overflow: auto; position: relative; background: #fff; color: #1d2030; user-select: none; -webkit-user-select: none; }
+  table#grid { border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+  #grid th { background: #e9ecf3; color: #4a5068; font-weight: 500; border: 1px solid #c5cada; position: sticky; top: 0; z-index: 2; height: 22px; }
+  #grid th.rh { position: sticky; left: 0; z-index: 1; top: auto; width: 42px; min-width: 42px; }
+  #grid th.corner { left: 0; z-index: 3; }
+  #grid td { border: 1px solid #dde1ec; height: 22px; padding: 0 4px; overflow: hidden; white-space: nowrap; text-overflow: clip; width: 90px; min-width: 90px; max-width: 90px; }
+  #grid td.sel { background: #dbe5ff; }
+  #grid td.act { outline: 2px solid #4d73f0; outline-offset: -2px; background: #fff; }
+  #grid td.err { color: #c0392b; }
+  #grid th.hl { background: #cfd8f3; }
+  #editor { position: absolute; display: none; z-index: 5; border: 2px solid #4d73f0; background: #fff; color: #1d2030; padding: 0 3px; height: 24px; font: 13px "Ubuntu", sans-serif; border-radius: 0; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button class="btn" onclick="C.newDoc()">Nouveau</button>
+  <button class="btn" onclick="C.openDoc()" title="Ctrl+O">Ouvrir</button>
+  <button class="btn primary" onclick="C.save()" title="Ctrl+S">Enregistrer</button>
+  <button class="btn" onclick="C.exportCsv()" title="Exporter en CSV (Excel, LibreOffice)">.csv</button>
+  <button class="btn" onclick="X32.print()" title="Imprimer / PDF">Imprimer</button>
+  <span class="sep"></span>
+  <button class="btn" onclick="C.undo()" title="Annuler (Ctrl+Z)">↶</button>
+  <button class="btn" onclick="C.redo()" title="Rétablir (Ctrl+Y)">↷</button>
+  <span class="sep"></span>
+  <button class="btn" onclick="C.style('b')" title="Gras (Ctrl+B)"><b>G</b></button>
+  <button class="btn" onclick="C.style('a','left')" title="À gauche">⇤</button>
+  <button class="btn" onclick="C.style('a','center')" title="Centré">↔</button>
+  <button class="btn" onclick="C.style('a','right')" title="À droite">⇥</button>
+  <input type="color" value="#fff3a0" title="Couleur de fond" onchange="C.style('bg', this.value)">
+  <button class="btn" onclick="C.style('bg','')" title="Sans couleur">∅</button>
+  <select id="fmt" onchange="C.style('f', this.value); this.blur()" title="Format des nombres">
+    <option value="">Auto</option><option value="0">0</option><option value="2">0,00</option><option value="%">%</option><option value="€">€</option>
+  </select>
+  <span class="sep"></span>
+  <button class="btn" onclick="C.sort(true)" title="Trier la colonne A→Z (lignes sélectionnées, sinon tout le tableau)">A↓Z</button>
+  <button class="btn" onclick="C.sort(false)" title="Trier la colonne Z→A">Z↓A</button>
+  <label class="small" title="Ne pas trier la première ligne"><input type="checkbox" id="hdr" checked> Titres</label>
+  <button class="btn" onclick="C.addRows()">+50 lignes</button>
+  <button class="btn" onclick="X32.home()" title="Accueil">⌂</button>
+</div>
+<div id="fx"><input type="text" id="name" readonly><input type="text" id="formula" placeholder="Valeur ou formule, ex. =SOMME(A1:A10)"></div>
+<div id="wrap"><table id="grid"></table><input type="text" id="editor" autocomplete="off"></div>
+<div class="status"><span id="fname">Sans titre</span><span class="grow"></span><span id="sum"></span></div>
+
+<script src="common.js"></script>
+<script src="calc-engine.js"></script>
+<script>
+(function () {
+  'use strict';
+  var E = window.X32Calc, COLS = 26, rows = 100, MAXROWS = 1000;
+  var sheet = new E.Sheet(), styles = {}, fname = 'Sans titre';
+  var ar = 0, ac = 0, sr = 0, sc = 0;               // cellule active / ancre de sélection : active = (ar,ac), fin = (er,ec)
+  var er = 0, ec = 0, editing = false, undoS = [], redoS = [], clip = null, dragging = false;
+  var grid = document.getElementById('grid'), wrap = document.getElementById('wrap');
+  var editor = document.getElementById('editor'), formula = document.getElementById('formula'), nameBox = document.getElementById('name');
+  var tds = [];                                       // tds[r][c]
+  var shown = {};                                     // clés actuellement affichées non vides
+
+  /* ---------- construction ---------- */
+  function build() {
+    var h = '<tr><th class="corner rh"></th>';
+    for (var c = 0; c < COLS; c++) h += '<th>' + E.colToName(c) + '</th>';
+    h += '</tr>';
+    for (var r = 0; r < rows; r++) {
+      h += '<tr><th class="rh">' + (r + 1) + '</th>';
+      for (var c2 = 0; c2 < COLS; c2++) h += '<td></td>';
+      h += '</tr>';
+    }
+    grid.innerHTML = h;
+    tds = [];
+    var trs = grid.rows;
+    for (var i = 0; i < rows; i++) { tds[i] = []; for (var j = 0; j < COLS; j++) tds[i][j] = trs[i + 1].cells[j + 1]; }
+    shown = {};
+    refresh(true); select();
+  }
+
+  /* ---------- affichage ---------- */
+  var NF = {};
+  function group(intPart) { return intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+  function fmtNum(v, f) {
+    var s, neg = v < 0; if (neg) v = -v;
+    if (f === '0') s = group(v.toFixed(0));
+    else if (f === '2') { var p = v.toFixed(2).split('.'); s = group(p[0]) + ',' + p[1]; }
+    else if (f === '%') { s = String(+(v * 100).toPrecision(10)).replace('.', ',') + ' %'; }
+    else if (f === '€') { var q = v.toFixed(2).split('.'); s = group(q[0]) + ',' + q[1] + ' €'; }
+    else { s = String(+v.toPrecision(12)).replace('.', ','); if (/e/.test(s)) s = s.replace('e', 'E'); }
+    return (neg ? '-' : '') + s;
+  }
+  function display(key) {
+    var v = sheet.valueOf(key), st = styles[key] || {};
+    if (v instanceof E.XErr) return { t: v.code, err: true };
+    if (typeof v === 'number') return { t: isFinite(v) ? fmtNum(v, st.f) : '#NOMBRE!', num: true, err: !isFinite(v) };
+    if (typeof v === 'boolean') return { t: v ? 'VRAI' : 'FAUX' };
+    return { t: String(v) };
+  }
+  function paint(key) {
+    var p = E.parseKey(key); if (!p || p.r >= rows || p.c >= COLS) return;
+    var td = tds[p.r][p.c], st = styles[key] || {}, d = sheet.getRaw(key) === '' ? { t: '' } : display(key);
+    td.textContent = d.t;
+    td.style.textAlign = st.a || (d.num ? 'right' : 'left');
+    td.style.fontWeight = st.b ? '700' : '';
+    td.style.background = st.bg || '';
+    td.className = td.className.replace(/\berr\b/g, '').trim() + (d.err ? ' err' : '');
+  }
+  function refresh(all) {
+    var k, now = {};
+    for (k in sheet.cells) now[k] = 1;
+    for (k in styles) now[k] = 1;
+    for (k in shown) if (!now[k]) { shown[k] = 0; paint(k); }
+    for (k in now) paint(k);
+    shown = now;
+    summary();
+  }
+  function summary() {
+    var r1 = Math.min(ar, er), r2 = Math.max(ar, er), c1 = Math.min(ac, ec), c2 = Math.max(ac, ec), s = 0, n = 0;
+    if ((r2 - r1 + 1) * (c2 - c1 + 1) > 1) {
+      for (var r = r1; r <= r2; r++) for (var c = c1; c <= c2; c++) { var v = sheet.valueOf(E.keyOf(c, r)); if (typeof v === 'number') { s += v; n++; } }
+    }
+    document.getElementById('sum').textContent = n > 1 ? 'Somme : ' + fmtNum(s) + '   Moyenne : ' + fmtNum(s / n) + '   Nombre : ' + n : '';
+  }
+
+  /* ---------- sélection ---------- */
+  var lastSel = [];
+  function select() {
+    var i, td;
+    for (i = 0; i < lastSel.length; i++) lastSel[i].className = lastSel[i].className.replace(/\b(sel|act)\b/g, '').trim();
+    lastSel = [];
+    var r1 = Math.min(ar, er), r2 = Math.max(ar, er), c1 = Math.min(ac, ec), c2 = Math.max(ac, ec);
+    for (var r = r1; r <= r2; r++) for (var c = c1; c <= c2; c++) { td = tds[r][c]; td.className = (td.className + ' sel').trim(); lastSel.push(td); }
+    td = tds[ar][ac]; td.className = (td.className.replace(/\bsel\b/, '') + ' act').trim();
+    var ths = grid.querySelectorAll('th.hl'); for (i = 0; i < ths.length; i++) ths[i].classList.remove('hl');
+    grid.rows[0].cells[ac + 1].classList.add('hl'); grid.rows[ar + 1].cells[0].classList.add('hl');
+    var key = E.keyOf(ac, ar);
+    nameBox.value = key; formula.value = sheet.getRaw(key);
+    var st = styles[key] || {}; document.getElementById('fmt').value = st.f || '';
+    summary();
+  }
+  function ensureVisible() {
+    var td = tds[ar][ac], w = wrap;
+    var L = td.offsetLeft, T = td.offsetTop, R = L + td.offsetWidth, B = T + td.offsetHeight;
+    if (L < w.scrollLeft + 44) w.scrollLeft = L - 44;
+    if (R > w.scrollLeft + w.clientWidth) w.scrollLeft = R - w.clientWidth + 2;
+    if (T < w.scrollTop + 24) w.scrollTop = T - 24;
+    if (B > w.scrollTop + w.clientHeight) w.scrollTop = B - w.clientHeight + 2;
+  }
+  function move(dr, dc, extend) {
+    if (extend) { er = Math.max(0, Math.min(rows - 1, er + dr)); ec = Math.max(0, Math.min(COLS - 1, ec + dc)); }
+    else { ar = Math.max(0, Math.min(rows - 1, ar + dr)); ac = Math.max(0, Math.min(COLS - 1, ac + dc)); er = ar; ec = ac; }
+    select();
+    var save = [ar, ac]; if (extend) { ar = er; ac = ec; } ensureVisible(); ar = save[0]; ac = save[1];
+  }
+
+  /* ---------- édition ---------- */
+  function startEdit(text) {
+    var td = tds[ar][ac]; editing = true;
+    editor.style.display = 'block';
+    editor.style.left = (td.offsetLeft - 1) + 'px'; editor.style.top = (td.offsetTop - 1) + 'px';
+    editor.style.width = Math.max(td.offsetWidth + 2, 160) + 'px';
+    editor.value = (text === undefined) ? sheet.getRaw(E.keyOf(ac, ar)) : text;
+    editor.focus();
+    if (text === undefined) editor.setSelectionRange(editor.value.length, editor.value.length);
+  }
+  function endEdit(commit, dr, dc) {
+    if (!editing) return;
+    editing = false; editor.style.display = 'none';
+    if (commit) setCells([{ key: E.keyOf(ac, ar), raw: editor.value }]);
+    wrap.focus(); document.body.focus();
+    move(dr || 0, dc || 0, false);
+  }
+  editor.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); endEdit(true, 1, 0); }
+    else if (e.key === 'Tab') { e.preventDefault(); endEdit(true, 0, e.shiftKey ? -1 : 1); }
+    else if (e.key === 'Escape') { e.preventDefault(); endEdit(false); }
+    e.stopPropagation();
+  });
+  editor.addEventListener('input', function () { formula.value = editor.value; });
+  formula.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); setCells([{ key: E.keyOf(ac, ar), raw: formula.value }]); document.activeElement.blur(); move(1, 0, false); }
+    else if (e.key === 'Escape') { formula.value = sheet.getRaw(E.keyOf(ac, ar)); document.activeElement.blur(); }
+    e.stopPropagation();
+  });
+
+  /* ---------- modifications avec annulation ---------- */
+  function setCells(list, noUndo) {
+    var ch = [];
+    for (var i = 0; i < list.length; i++) {
+      var k = list[i].key, before = sheet.getRaw(k), after = list[i].raw;
+      if (before !== after) { ch.push({ key: k, before: before, after: after }); sheet.setRaw(k, after); }
+    }
+    if (!ch.length) return;
+    if (!noUndo) { undoS.push({ cells: ch }); if (undoS.length > 100) undoS.shift(); redoS = []; }
+    dirty(); refresh(); select();
+  }
+  function setStyles(keys, prop, val) {
+    var ch = [];
+    keys.forEach(function (k) {
+      var st = styles[k] || {}, before = st[prop];
+      var nv = (prop === 'b') ? (val === 'toggle' ? !before : val) : val;
+      if (nv === before) return;
+      ch.push({ key: k, prop: prop, before: before, after: nv });
+      applyStyle(k, prop, nv);
+    });
+    if (ch.length) { undoS.push({ styles: ch }); redoS = []; dirty(); refresh(); select(); }
+  }
+  function applyStyle(k, prop, v) {
+    var st = styles[k] || (styles[k] = {});
+    if (v === undefined || v === '' || v === false) delete st[prop]; else st[prop] = v;
+    if (!Object.keys(st).length) delete styles[k];
+  }
+  function undo(from, to, field) {
+    var e = from.pop(); if (!e) return;
+    to.push(e);
+    if (e.cells) e.cells.forEach(function (c) { sheet.setRaw(c.key, field === 'u' ? c.before : c.after); });
+    if (e.styles) e.styles.forEach(function (c) { applyStyle(c.key, c.prop, field === 'u' ? c.before : c.after); });
+    dirty(); refresh(); select();
+  }
+  function dirty() { X32.dirty = true; title(); }
+  function title() { document.title = (X32.dirty ? '● ' : '') + fname + ' - Tableur'; document.getElementById('fname').textContent = fname + (X32.dirty ? ' (modifié)' : ''); }
+  function selKeys() {
+    var r1 = Math.min(ar, er), r2 = Math.max(ar, er), c1 = Math.min(ac, ec), c2 = Math.max(ac, ec), out = [];
+    for (var r = r1; r <= r2; r++) for (var c = c1; c <= c2; c++) out.push(E.keyOf(c, r));
+    return out;
+  }
+
+  /* ---------- souris ---------- */
+  grid.addEventListener('mousedown', function (e) {
+    var td = e.target.closest('td'); if (!td) return;
+    if (editing) endEdit(true, 0, 0);
+    var r = td.parentNode.rowIndex - 1, c = td.cellIndex - 1;
+    if (e.shiftKey) { er = r; ec = c; } else { ar = er = r; ac = ec = c; }
+    dragging = true; select();
+  });
+  grid.addEventListener('mouseover', function (e) {
+    if (!dragging) return; var td = e.target.closest('td'); if (!td) return;
+    er = td.parentNode.rowIndex - 1; ec = td.cellIndex - 1; select();
+  });
+  document.addEventListener('mouseup', function () { dragging = false; });
+  grid.addEventListener('dblclick', function (e) { if (e.target.closest('td')) startEdit(); });
+
+  /* ---------- clavier ---------- */
+  document.addEventListener('keydown', function (e) {
+    if (editing || e.target === formula || document.querySelector('.modal-back')) return;
+    var ctrl = e.ctrlKey || e.metaKey, k = e.key;
+    if (ctrl) {
+      var l = k.toLowerCase();
+      if (l === 's') { e.preventDefault(); C.save(); }
+      else if (l === 'o') { e.preventDefault(); C.openDoc(); }
+      else if (l === 'z') { e.preventDefault(); C.undo(); }
+      else if (l === 'y') { e.preventDefault(); C.redo(); }
+      else if (l === 'b') { e.preventDefault(); C.style('b'); }
+      else if (l === 'p') { e.preventDefault(); X32.print(); }
+      else if (l === 'd') { e.preventDefault(); fillDown(); }
+      else if (l === 'a') { e.preventDefault(); ar = ac = 0; er = rows - 1; ec = COLS - 1; select(); }
+      return;
+    }
+    var ext = e.shiftKey;
+    if (k === 'ArrowDown') { e.preventDefault(); move(1, 0, ext); }
+    else if (k === 'ArrowUp') { e.preventDefault(); move(-1, 0, ext); }
+    else if (k === 'ArrowLeft') { e.preventDefault(); move(0, -1, ext); }
+    else if (k === 'ArrowRight') { e.preventDefault(); move(0, 1, ext); }
+    else if (k === 'PageDown') { e.preventDefault(); move(15, 0, ext); }
+    else if (k === 'PageUp') { e.preventDefault(); move(-15, 0, ext); }
+    else if (k === 'Home') { e.preventDefault(); ar = ar; ac = 0; er = ar; ec = 0; select(); ensureVisible(); }
+    else if (k === 'Enter') { e.preventDefault(); startEdit(); }
+    else if (k === 'F2') { e.preventDefault(); startEdit(); }
+    else if (k === 'Tab') { e.preventDefault(); move(0, ext ? -1 : 1, false); }
+    else if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); setCells(selKeys().map(function (x) { return { key: x, raw: '' }; })); }
+    else if (k.length === 1 && !e.altKey) { e.preventDefault(); startEdit(k); }
+  });
+
+  /* ---------- presse-papiers (TSV, compatible avec les autres logiciels) ---------- */
+  function rect() { return { r1: Math.min(ar, er), r2: Math.max(ar, er), c1: Math.min(ac, ec), c2: Math.max(ac, ec) }; }
+  function tsvOf(rc, raw) {
+    var lines = [];
+    for (var r = rc.r1; r <= rc.r2; r++) {
+      var cells = [];
+      for (var c = rc.c1; c <= rc.c2; c++) { var k = E.keyOf(c, r); cells.push(raw ? sheet.getRaw(k) : (sheet.getRaw(k) === '' ? '' : display(k).t)); }
+      lines.push(cells.join('\t'));
+    }
+    return lines.join('\n');
+  }
+  document.addEventListener('copy', function (e) {
+    if (editing || document.activeElement === formula) return;
+    var rc = rect(); e.preventDefault();
+    var txt = tsvOf(rc, false); e.clipboardData.setData('text/plain', txt);
+    clip = { text: txt, raw: tsvOf(rc, true), r1: rc.r1, c1: rc.c1 };
+  });
+  document.addEventListener('cut', function (e) {
+    if (editing || document.activeElement === formula) return;
+    var rc = rect(); e.preventDefault();
+    var txt = tsvOf(rc, false); e.clipboardData.setData('text/plain', txt);
+    clip = { text: txt, raw: tsvOf(rc, true), r1: rc.r1, c1: rc.c1 };
+    setCells(selKeys().map(function (x) { return { key: x, raw: '' }; }));
+  });
+  document.addEventListener('paste', function (e) {
+    if (editing || document.activeElement === formula) return;
+    e.preventDefault();
+    var txt = (e.clipboardData && e.clipboardData.getData('text/plain')) || '';
+    if (!txt) return;
+    var internal = clip && clip.text === txt.replace(/\r/g, '');
+    var src = (internal ? clip.raw : txt.replace(/\r/g, '')).replace(/\n$/, '').split('\n');
+    var list = [], dr = ar - (internal ? clip.r1 : 0), dc = ac - (internal ? clip.c1 : 0);
+    for (var i = 0; i < src.length; i++) {
+      var parts = src[i].split('\t');
+      for (var j = 0; j < parts.length; j++) {
+        var r = ar + i, c = ac + j; if (r >= rows || c >= COLS) continue;
+        list.push({ key: E.keyOf(c, r), raw: internal ? E.shiftFormula(parts[j], dc, dr) : parts[j] });
+      }
+    }
+    setCells(list);
+    er = Math.min(rows - 1, ar + src.length - 1); ec = Math.min(COLS - 1, ac + src[0].split('\t').length - 1); select();
+  });
+  function fillDown() {
+    var rc = rect(), list = [];
+    for (var c = rc.c1; c <= rc.c2; c++) {
+      var top = sheet.getRaw(E.keyOf(c, rc.r1));
+      for (var r = rc.r1 + 1; r <= rc.r2; r++) list.push({ key: E.keyOf(c, r), raw: E.shiftFormula(top, 0, r - rc.r1) });
+    }
+    setCells(list);
+  }
+
+  /* ---------- fichiers ---------- */
+  function csvParse(text) {
+    var first = text.split(/\r?\n/)[0] || '', sep = ';';
+    var cnt = { ';': (first.match(/;/g) || []).length, '\t': (first.match(/\t/g) || []).length, ',': (first.match(/,/g) || []).length };
+    if (cnt['\t'] > cnt[sep]) sep = '\t'; if (cnt[','] > cnt[sep]) sep = ',';
+    var out = [], row = [], cur = '', q = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (q) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === sep) { row.push(cur); cur = ''; }
+      else if (ch === '\n') { row.push(cur); out.push(row); row = []; cur = ''; }
+      else if (ch !== '\r') cur += ch;
+    }
+    if (cur !== '' || row.length) { row.push(cur); out.push(row); }
+    return out;
+  }
+  function reset() { sheet = new E.Sheet(); styles = {}; undoS = []; redoS = []; ar = ac = er = ec = 0; build(); }
+  X32.openHandler = function (name, text) {
+    reset();
+    if (/\.csv$/i.test(name) || /\.txt$/i.test(name)) {
+      var data = csvParse(text.replace(/^﻿/, '')), need = Math.min(MAXROWS, data.length + 20);
+      if (need > rows) { rows = need; build(); }
+      data.forEach(function (row, r) { row.forEach(function (v, c) { if (r < rows && c < COLS && v !== '') sheet.setRaw(E.keyOf(c, r), v); }); });
+    } else {
+      try {
+        var d = JSON.parse(text);
+        if (d.format !== 'x32calc') throw new Error('format');
+        var maxr = 0; for (var k in d.cells) { var p = E.parseKey(k); if (p) maxr = Math.max(maxr, p.r); }
+        rows = Math.max(100, Math.min(MAXROWS, Math.max(d.rows || 0, maxr + 20))); build();
+        for (var k2 in d.cells) sheet.setRaw(k2, d.cells[k2]);
+        styles = d.styles || {};
+      } catch (err) { X32.toast('Fichier illisible'); return; }
+    }
+    fname = name; X32.dirty = false; refresh(); select(); title(); X32.toast('Ouvert : ' + name);
+  };
+
+  var C = window.C = {
+    newDoc: function () {
+      function go() { fname = 'Sans titre'; rows = 100; reset(); X32.dirty = false; title(); }
+      if (X32.dirty) X32.ask('Abandonner les modifications non enregistrées ?', '', go, { confirm: true, yes: 'Abandonner' }); else go();
+    },
+    openDoc: function () { X32.open('.x32c,.csv,.txt'); },
+    save: function () {
+      var obj = { format: 'x32calc', version: 1, rows: rows, cells: sheet.cells, styles: styles };
+      X32.save(fname.replace(/\.(x32c|csv|txt)$/i, '') + '.x32c', 'application/x-x32calc', JSON.stringify(obj),
+        function (n) { fname = n; X32.dirty = false; title(); X32.toast('Enregistré'); });
+    },
+    exportCsv: function () {
+      var maxr = -1, maxc = -1, k;
+      for (k in sheet.cells) { var p = E.parseKey(k); if (p) { maxr = Math.max(maxr, p.r); maxc = Math.max(maxc, p.c); } }
+      var lines = [];
+      for (var r = 0; r <= maxr; r++) {
+        var cells = [];
+        for (var c = 0; c <= maxc; c++) {
+          var key = E.keyOf(c, r), t = '';
+          if (sheet.getRaw(key) !== '') { var v = sheet.valueOf(key); t = v instanceof E.XErr ? v.code : (typeof v === 'number' ? String(v).replace('.', ',') : E.toStr(v)); }
+          cells.push(/[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t);
+        }
+        lines.push(cells.join(';'));
+      }
+      X32.save(fname.replace(/\.(x32c|csv|txt)$/i, '') + '.csv', 'text/csv', '﻿' + lines.join('\r\n') + '\r\n', function () { X32.toast('CSV exporté (séparateur « ; »)'); });
+    },
+    undo: function () { if (editing) return; undo(undoS, redoS, 'u'); },
+    redo: function () { if (editing) return; undo(redoS, undoS, 'r'); },
+    style: function (prop, val) {
+      var keys = selKeys();
+      if (prop === 'b') setStyles(keys, 'b', 'toggle'); else setStyles(keys, prop, val);
+    },
+    sort: function (asc) {
+      var hdr = document.getElementById('hdr').checked, last = -1, k;
+      for (k in sheet.cells) { var p = E.parseKey(k); if (p) last = Math.max(last, p.r); }
+      var start = hdr ? 1 : 0, rc = rect();
+      if (rc.r2 > rc.r1) { start = rc.r1; last = rc.r2; }            // plusieurs lignes sélectionnées : on ne trie que celles-ci
+      if (last < start + 1) return;
+      var data = [];
+      for (var r = start; r <= last; r++) { var row = []; for (var c = 0; c < COLS; c++) row.push(sheet.getRaw(E.keyOf(c, r))); data.push({ row: row, v: sheet.valueOf(E.keyOf(ac, r)) }); }
+      data.sort(function (a, b) {
+        var x = a.v, y = b.v, bx = (x === '' || x === undefined), by = (y === '' || y === undefined);
+        if (bx || by) return bx === by ? 0 : (bx ? 1 : -1);          // cases vides toujours à la fin
+        var res;
+        if (typeof x === 'number' && typeof y === 'number') res = x - y;
+        else if (typeof x === 'number') res = -1; else if (typeof y === 'number') res = 1;
+        else res = String(x).localeCompare(String(y), 'fr', { sensitivity: 'base' });
+        return asc ? res : -res;
+      });
+      var list = [];
+      data.forEach(function (d, i) { for (var c = 0; c < COLS; c++) list.push({ key: E.keyOf(c, start + i), raw: d.row[c] }); });
+      setCells(list); X32.toast('Trié (les formules sont déplacées telles quelles)');
+    },
+    addRows: function () { if (rows >= MAXROWS) return X32.toast('Maximum : ' + MAXROWS + ' lignes'); rows = Math.min(MAXROWS, rows + 50); var a = ar, b = ac; build(); ar = er = a; ac = ec = b; select(); }
+  };
+
+  wrap.tabIndex = 0;
+  build(); title(); wrap.focus();
+})();
+</script>
+</body>
+</html>

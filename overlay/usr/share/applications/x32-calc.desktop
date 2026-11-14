@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=X32 Tableur
+GenericName=Tableur
+Comment=Calculs et listes avec formules (léger, hors ligne)
+Exec=/usr/local/bin/x32-calc %f
+Icon=x32-calc
+Terminal=false
+StartupWMClass=x32-office
+Categories=Office;Spreadsheet;
+MimeType=text/csv;application/x-x32calc;

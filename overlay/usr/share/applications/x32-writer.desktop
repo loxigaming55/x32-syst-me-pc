@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=X32 Texte
+GenericName=Traitement de texte
+Comment=Écrire des lettres et des documents (léger, hors ligne)
+Exec=/usr/local/bin/x32-writer %f
+Icon=x32-writer
+Terminal=false
+StartupWMClass=x32-office
+Categories=Office;WordProcessor;
+MimeType=text/plain;

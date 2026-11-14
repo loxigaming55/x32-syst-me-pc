@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=X32 Office
+GenericName=Bureautique
+Comment=Texte et tableur légers, hors ligne
+Exec=/usr/local/bin/x32-office
+Icon=x32-office
+Terminal=false
+StartupWMClass=x32-office
+Categories=Office;

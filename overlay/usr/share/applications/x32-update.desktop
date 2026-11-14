@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Mise à jour X32
+GenericName=Mettre à jour le système
+Comment=Met à jour X32 Système PC et Firefox (Wi-Fi) sans réinstaller
+Exec=lxterminal --title="Mise à jour X32" -e "pkexec /usr/local/sbin/x32-update --pause"
+Icon=system-software-update
+Terminal=false
+Categories=System;Settings;

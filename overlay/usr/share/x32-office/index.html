@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src file: data: blob: 'unsafe-inline'; connect-src 'none'; form-action 'none'">
+<title>X32 Office</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  body { align-items: center; justify-content: center; text-align: center; }
+  h1 { font-size: 26px; font-weight: 500; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 26px; }
+  .cards { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+  a.card { width: 200px; padding: 22px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bar);
+           color: var(--fg); text-decoration: none; display: block; }
+  a.card:hover, a.card:focus { border-color: var(--accent); background: #3b4260; outline: none; }
+  a.card b { display: block; font-size: 17px; margin: 8px 0 4px; font-weight: 500; }
+  a.card span { color: var(--muted); font-size: 12px; }
+  .ico { font-size: 40px; line-height: 1; }
+  footer { margin-top: 28px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>X32 Office</h1>
+  <p class="sub">Légère, rapide, hors ligne.</p>
+  <div class="cards">
+    <a class="card" href="writer.html" autofocus><div class="ico">📝</div><b>Texte</b><span>Lettres, rapports, notes</span></a>
+    <a class="card" href="calc.html"><div class="ico">📊</div><b>Tableur</b><span>Calculs, formules, listes</span></a>
+  </div>
+  <footer>Les documents texte s'enregistrent en .html, les tableurs en .x32c (et .csv pour Excel / LibreOffice).</footer>
+</body>
+</html>

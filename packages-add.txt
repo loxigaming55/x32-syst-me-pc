@@ -1,12 +1,15 @@
 # Paquets à ajouter (nécessite l'accès au dépôt Ubuntu bionic pendant le build).
 # Un nom par ligne.
-#  - ligne normale     : REQUIS. Si l'installation échoue, LibreOffice est conservé.
+#  - ligne normale     : REQUIS. Si l'installation échoue, les paquets d'origine sont conservés.
 #  - "@optionnel:nom"  : design, installé séparément ; un échec ne bloque rien.
 
-# Remplaçants légers de LibreOffice
-abiword
-gnumeric
+# (aucun paquet requis : la bureautique est X32 Office, fournie dans overlay/usr/share/x32-office)
+# Pour ouvrir des .docx / .xlsx, vous pouvez ajouter ici « abiword » et « gnumeric ».
 
 # Design : thème sombre moderne et icônes
 @optionnel:arc-theme
 @optionnel:papirus-icon-theme
+
+# X32 Office : fenêtre d'application (si absents, X32 Office s'ouvre dans Firefox)
+@optionnel:python3-gi
+@optionnel:gir1.2-webkit2-4.0

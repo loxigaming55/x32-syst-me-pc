@@ -1,0 +1,2 @@
+#!/bin/sh
+X32_PAGE=calc.html exec /usr/local/bin/x32-office "$@"

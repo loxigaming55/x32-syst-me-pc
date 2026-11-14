@@ -1,0 +1,131 @@
+#!/bin/bash
+# Installe / met à jour Firefox ESR dans /opt/firefox (version officielle Mozilla, 32 bits).
+#
+# Mozilla a arrêté Firefox 32 bits sur Linux après la version 144 ; la branche
+# ESR 140 est la DERNIÈRE à avoir un build i686 (mises à jour de sécurité garanties
+# « au moins jusqu'en septembre 2026 », voir README). Ce script reste donc sur ESR 140.
+#
+#   x32-firefox-update               installe/met à jour si une version plus récente existe
+#   x32-firefox-update --check       affiche versions installée / disponible
+#   x32-firefox-update --force       réinstalle même si déjà à jour
+#   x32-firefox-update --from-file F installe depuis une archive firefox-*.tar.xz/.tar.bz2 (hors ligne)
+#   x32-firefox-update --root DIR    installe dans DIR/opt/firefox (utilisé par build.sh)
+set -Eeuo pipefail
+
+ESR_MAJOR="${X32_FIREFOX_ESR_MAJOR:-140}"
+LANG_CODE="${X32_FIREFOX_LANG:-fr}"
+ARCH_DIR="linux-i686"
+BASE="https://archive.mozilla.org/pub/firefox/releases"
+ROOT=""; MODE="update"; FORCE=0; FROM_FILE=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check) MODE=check ;;
+    --force) FORCE=1 ;;
+    --from-file) FROM_FILE="${2:?archive manquante}"; shift ;;
+    --root) ROOT="${2:?dossier manquant}"; shift ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    *) echo "option inconnue : $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+DEST="$ROOT/opt/firefox"
+CONF_SRC="${X32_FF_CONF_SRC:-$ROOT/usr/share/x32/firefox}"
+log() { echo "[firefox] $*"; }
+die() { echo "[firefox] ERREUR : $*" >&2; exit 1; }
+
+[ "$MODE" = check ] || [ "$(id -u)" -eq 0 ] || die "lancez en root (sudo)"
+
+dl() {  # dl URL SORTIE
+  if command -v wget >/dev/null 2>&1; then wget -q --tries=3 --timeout=30 -O "$2" "$1"
+  else curl -fsSL --retry 3 --max-time 600 -o "$2" "$1"; fi
+}
+
+installed_version() {
+  sed -n 's/^Version=//p' "$DEST/application.ini" 2>/dev/null | head -1
+}
+
+latest_version() {  # plus récente 140.x.yesr ayant un build i686 dans la langue voulue
+  local tmp list v
+  tmp="$(mktemp)"; dl "$BASE/" "$tmp" || { rm -f "$tmp"; return 1; }
+  list="$(grep -oE "href=\"[^\"]*/${ESR_MAJOR}\.[0-9.]+esr/\"" "$tmp" | grep -oE "${ESR_MAJOR}\.[0-9.]+esr" | sort -uV | tac)"
+  rm -f "$tmp"
+  for v in $list; do
+    # on teste l'existence du fichier SHA256SUMS de la version
+    if dl "$BASE/$v/SHA256SUMS" /dev/null 2>/dev/null; then echo "$v"; return 0; fi
+  done
+  return 1
+}
+
+strip_esr() { echo "${1%esr}"; }
+
+if [ "$MODE" = check ]; then
+  cur="$(installed_version || true)"; log "installée : ${cur:-aucune}"
+  new="$(latest_version || true)"; log "disponible : ${new:-inconnue (hors ligne ?)}"
+  exit 0
+fi
+
+WORKDIR="$(mktemp -d)"; trap 'rm -rf "$WORKDIR"' EXIT
+ARCHIVE=""
+
+if [ -n "$FROM_FILE" ]; then
+  [ -f "$FROM_FILE" ] || die "fichier introuvable : $FROM_FILE"
+  ARCHIVE="$FROM_FILE"
+  log "installation depuis $FROM_FILE (sans vérification réseau)"
+else
+  cur="$(installed_version || true)"
+  new="$(latest_version)" || die "impossible de joindre archive.mozilla.org (Wi-Fi ?)"
+  if [ "$FORCE" = 0 ] && [ -n "$cur" ] && [ "$(strip_esr "$cur")" = "$(strip_esr "$new")" ]; then
+    log "Firefox est déjà à jour ($cur)"; exit 0
+  fi
+  log "version disponible : $new (installée : ${cur:-aucune})"
+  v="$new"   # les fichiers ESR gardent « esr » dans leur nom : firefox-140.x.yesr.tar.xz
+  dl "$BASE/$new/SHA256SUMS" "$WORKDIR/SHA256SUMS" || die "SHA256SUMS introuvable"
+  name=""
+  for ext in tar.xz tar.bz2; do
+    rel="$ARCH_DIR/$LANG_CODE/firefox-$v.$ext"
+    grep -q " $rel\$" "$WORKDIR/SHA256SUMS" && { name="firefox-$v.$ext"; break; }
+  done
+  [ -n "$name" ] || die "pas de build $ARCH_DIR/$LANG_CODE pour $new"
+  log "téléchargement de $name"
+  dl "$BASE/$new/$ARCH_DIR/$LANG_CODE/$name" "$WORKDIR/$name" || die "téléchargement échoué"
+  want="$(grep " $ARCH_DIR/$LANG_CODE/$name\$" "$WORKDIR/SHA256SUMS" | awk '{print $1}')"
+  got="$(sha256sum "$WORKDIR/$name" | awk '{print $1}')"
+  [ -n "$want" ] && [ "$want" = "$got" ] || die "somme SHA256 incorrecte, installation annulée"
+  ARCHIVE="$WORKDIR/$name"
+fi
+
+log "extraction"
+mkdir -p "$WORKDIR/x"
+tar -C "$WORKDIR/x" -xf "$ARCHIVE" || die "archive illisible"
+[ -x "$WORKDIR/x/firefox/firefox" ] || die "l'archive ne contient pas firefox/firefox"
+if [ "${X32_FF_TEST:-0}" != 1 ] && ! file -b "$WORKDIR/x/firefox/firefox" 2>/dev/null | grep -qi 'ELF 32-bit'; then
+  command -v file >/dev/null 2>&1 && die "ce Firefox n'est pas un binaire 32 bits (i686)"
+fi
+
+# Remplacement atomique, avec conservation de l'ancienne version pour retour arrière
+mkdir -p "$ROOT/opt"
+rm -rf "$DEST.old"
+[ -d "$DEST" ] && mv "$DEST" "$DEST.old"
+mv "$WORKDIR/x/firefox" "$DEST"
+
+# Réglages X32 (politiques + préférences allégées)
+if [ -d "$CONF_SRC" ]; then
+  mkdir -p "$DEST/distribution" "$DEST/defaults/pref"
+  [ -f "$CONF_SRC/policies.json" ] && cp "$CONF_SRC/policies.json" "$DEST/distribution/policies.json"
+  [ -f "$CONF_SRC/x32-prefs.js" ]  && cp "$CONF_SRC/x32-prefs.js"  "$DEST/defaults/pref/x32-prefs.js"
+fi
+
+# Lanceur et navigateur par défaut
+mkdir -p "$ROOT/usr/local/bin"
+ln -sf /opt/firefox/firefox "$ROOT/usr/local/bin/firefox"
+if [ -z "$ROOT" ]; then
+  update-alternatives --install /usr/bin/x-www-browser x-www-browser /opt/firefox/firefox 200 >/dev/null 2>&1 || true
+  update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /opt/firefox/firefox 200 >/dev/null 2>&1 || true
+  # Cache de démarrage de l'ancien profil : évite des erreurs après un changement de version
+  find /home /root -maxdepth 4 -path '*/.cache/mozilla/firefox/*' -name startupCache -exec rm -rf {} + 2>/dev/null || true
+fi
+
+rm -rf "$DEST.old"
+log "OK : Firefox $(installed_version) installé dans /opt/firefox"

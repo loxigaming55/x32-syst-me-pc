@@ -78,7 +78,7 @@ for s in ModemManager.service cups-browsed.service avahi-daemon.service \
 done
 
 # Services maison (zram, gouverneur CPU, noatime au premier démarrage)
-for u in x32-zram.service x32-cpu.service x32-firstboot.service; do
+for u in x32-zram.service x32-cpu.service x32-firstboot.service x32-prefetch.service; do
   systemctl enable "$u" >/dev/null 2>&1 \
     || ln -sf "/etc/systemd/system/$u" "/etc/systemd/system/multi-user.target.wants/$u"
 done
@@ -110,12 +110,42 @@ done
 # Design (thème, icônes, écran de connexion) : voir chroot-design.sh
 [ -f "$SRC/chroot-design.sh" ] && . "$SRC/chroot-design.sh"
 
-# Firefox : réglages pour petit processeur (selon l'emplacement présent dans cette version)
-if [ -f /usr/share/x32/firefox-x32.js ]; then
-  for d in /usr/lib/firefox/browser/defaults/preferences /usr/lib/firefox/defaults/pref; do
-    [ -d "$d" ] && cp /usr/share/x32/firefox-x32.js "$d/x32-tweaks.js"
-  done
+# Firefox ESR 140 officiel (installé par build.sh dans /opt/firefox) : si présent,
+# on retire le Firefox d'Ubuntu 18.04 (trop ancien) et on met le nouveau par défaut.
+if [ -x /opt/firefox/firefox ]; then
+  mapfile -t OLDFF < <(installed_matching 'firefox*')
+  if [ "${#OLDFF[@]}" -gt 0 ]; then
+    log "remplacement de Firefox Ubuntu (${OLDFF[*]}) par Firefox ESR officiel"
+    apt-get purge -y "${OLDFF[@]}" || log "ATTENTION : suppression de l'ancien Firefox impossible"
+  fi
+  ln -sf /opt/firefox/firefox /usr/local/bin/firefox
+  update-alternatives --install /usr/bin/x-www-browser x-www-browser /opt/firefox/firefox 200 >/dev/null 2>&1 || true
+  update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /opt/firefox/firefox 200 >/dev/null 2>&1 || true
+  # Entrée de menu (le paquet Ubuntu l'avait fournie)
+  if [ ! -f /usr/share/applications/firefox.desktop ]; then
+    cat > /usr/share/applications/firefox.desktop <<'DESK'
+[Desktop Entry]
+Type=Application
+Name=Firefox
+GenericName=Navigateur web
+Comment=Navigateur web (ESR, version allégée X32)
+Exec=/opt/firefox/firefox %u
+Icon=/opt/firefox/browser/chrome/icons/default/default128.png
+Terminal=false
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupWMClass=firefox
+DESK
+  fi
+else
+  log "Firefox officiel absent : le Firefox d'Ubuntu est conservé"
 fi
+
+# X32 Office : droits, types MIME, menus et icônes
+chmod +x /usr/local/bin/x32-* /usr/local/sbin/x32-* 2>/dev/null || true
+update-mime-database /usr/share/mime >/dev/null 2>&1 || true
+update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+gtk-update-icon-cache -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
 
 # ---------------------------------------------------------------- 5. identité
 if [ -f /etc/os-release ]; then

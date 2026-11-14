@@ -1,0 +1,18 @@
+#!/bin/sh
+# Charge Firefox dans le cache disque en arrière-plan (priorité minimale) pour que sa
+# première ouverture soit plus rapide sur un disque dur lent.
+# Désactivé automatiquement si la RAM est trop petite (< 1,4 Go) ou si X32_PREFETCH=0
+# dans /etc/default/x32-tuning.
+
+X32_PREFETCH=1
+[ -r /etc/default/x32-tuning ] && . /etc/default/x32-tuning
+[ "$X32_PREFETCH" = "1" ] || exit 0
+
+mem_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+[ "${mem_kb:-0}" -ge 1400000 ] || exit 0
+[ -d /opt/firefox ] || exit 0
+
+for f in /opt/firefox/libxul.so /opt/firefox/omni.ja /opt/firefox/browser/omni.ja; do
+  [ -f "$f" ] && nice -n 19 ionice -c3 cat "$f" > /dev/null 2>&1
+done
+exit 0
